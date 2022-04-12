@@ -8,13 +8,10 @@ data "aws_caller_identity" "current" {}
 locals {
   account_id = data.aws_caller_identity.current.account_id
 
-  backup_plan_ids = {
-    "monthly"                       = aws_backup_plan.monthly.id
-    "nightly"                       = aws_backup_plan.nightly.id
-    "nightly_and_replicate"         = aws_backup_plan.nightly_and_replicate.id
-    "nightly_and_replicate_windows" = aws_backup_plan.nightly_and_replicate_windows.id
-    "nightly_windows"               = aws_backup_plan.nightly_windows.id
-  }
+  backup_plan_ids = [
+    aws_backup_plan.this.id,
+    aws_backup_plan.and_replicate.id
+  ]
 }
 
 data "aws_iam_policy_document" "assume" {
@@ -38,9 +35,14 @@ resource "aws_iam_role" "this" {
   }
 }
 
-resource "aws_iam_role_policy_attachment" "this" {
+resource "aws_iam_role_policy_attachment" "backup" {
   role       = aws_iam_role.this.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup"
+}
+
+resource "aws_iam_role_policy_attachment" "restore" {
+  role       = aws_iam_role.this.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForRestores"
 }
 
 resource "aws_backup_vault" "replica" {
@@ -57,15 +59,14 @@ resource "aws_backup_vault" "primary" {
   tags        = var.tags
 }
 
-# AWS Backup plan
-resource "aws_backup_plan" "nightly_and_replicate" {
-  name = "nightly_replicated"
+resource "aws_backup_plan" "and_replicate" {
+  name = "${var.name}_replicated"
   tags = var.tags
 
   rule {
-    rule_name           = "nightly_backup"
+    rule_name           = "${var.name}_backup"
     completion_window   = var.completion_window
-    recovery_point_tags = merge(var.tags, { BackupPlan = "nightly_replicated" })
+    recovery_point_tags = merge(var.tags, { BackupPlan = "${var.name}_replicated" })
     schedule            = var.schedule
     target_vault_name   = aws_backup_vault.primary.name
 
@@ -83,47 +84,14 @@ resource "aws_backup_plan" "nightly_and_replicate" {
   }
 }
 
-resource "aws_backup_plan" "nightly_and_replicate_windows" {
-  name = "nightly_replicated_win"
+resource "aws_backup_plan" "this" {
+  name = "${var.name}_no_replication"
   tags = var.tags
 
   rule {
-    rule_name           = "nightly_backup"
+    rule_name           = "${var.name}_backup"
     completion_window   = var.completion_window
-    recovery_point_tags = merge(var.tags, { BackupPlan = "nightly_replicated_win" })
-    schedule            = var.schedule
-    target_vault_name   = aws_backup_vault.primary.name
-
-    copy_action {
-      destination_vault_arn = aws_backup_vault.replica.arn
-
-      lifecycle {
-        delete_after = var.replica_retain_days
-      }
-    }
-
-    lifecycle {
-      delete_after = var.primary_retain_days
-    }
-  }
-
-  advanced_backup_setting {
-    resource_type = "EC2"
-
-    backup_options = {
-      WindowsVSS = "enabled"
-    }
-  }
-}
-
-resource "aws_backup_plan" "nightly" {
-  name = "nightly_no_replication"
-  tags = var.tags
-
-  rule {
-    rule_name           = "nightly_backup"
-    completion_window   = var.completion_window
-    recovery_point_tags = merge(var.tags, { BackupPlan = "nightly_no_replication" })
+    recovery_point_tags = merge(var.tags, { BackupPlan = "${var.name}_no_replication" })
     schedule            = var.schedule
     target_vault_name   = aws_backup_vault.primary.name
 
@@ -133,104 +101,32 @@ resource "aws_backup_plan" "nightly" {
   }
 }
 
-resource "aws_backup_plan" "nightly_windows" {
-  name = "nightly_no_replication_windows"
-  tags = var.tags
+resource "aws_backup_selection" "this" {
+  name         = "${var.name}_backup_selection"
+  iam_role_arn = aws_iam_role.this.arn
+  plan_id      = aws_backup_plan.this.id
 
-  rule {
-    rule_name           = "nightly_backup"
-    completion_window   = var.completion_window
-    recovery_point_tags = merge(var.tags, { BackupPlan = "nightly_no_replication_windows" })
-    schedule            = var.schedule
-    target_vault_name   = aws_backup_vault.primary.name
-
-    lifecycle {
-      delete_after = var.primary_retain_days
-    }
-  }
-
-  advanced_backup_setting {
-    resource_type = "EC2"
-
-    backup_options = {
-      WindowsVSS = "enabled"
+  dynamic "selection_tag" {
+    for_each = var.backup_selection_tags
+    content {
+      type  = lookup(selection_tag.value, "type", null)
+      key   = lookup(selection_tag.value, "key", null)
+      value = lookup(selection_tag.value, "value", null)
     }
   }
 }
 
-resource "aws_backup_plan" "monthly" {
-  name = "monthly_no_replication"
-  tags = var.tags
+resource "aws_backup_selection" "and_replicate" {
+  name         = "${var.name}_and_replicate_backup_selection"
+  iam_role_arn = aws_iam_role.this.arn
+  plan_id      = aws_backup_plan.and_replicate.id
 
-  rule {
-    rule_name           = "monthly_backup"
-    completion_window   = var.completion_window
-    recovery_point_tags = merge(var.tags, { BackupPlan = "monthly_no_replication" })
-    schedule            = var.schedule
-    target_vault_name   = aws_backup_vault.primary.name
-
-    lifecycle {
-      delete_after = var.primary_monthly_retain_days
+  dynamic "selection_tag" {
+    for_each = var.replicate_selection_tags
+    content {
+      type  = lookup(selection_tag.value, "type", null)
+      key   = lookup(selection_tag.value, "key", null)
+      value = lookup(selection_tag.value, "value", null)
     }
-  }
-}
-
-resource "aws_backup_selection" "monthly" {
-  name         = "monthly_backup_selection"
-  iam_role_arn = aws_iam_role.this.arn
-  plan_id      = aws_backup_plan.monthly.id
-
-  selection_tag {
-    type  = "STRINGEQUALS"
-    key   = "BACKUP_POLICY"
-    value = "monthly"
-  }
-}
-
-resource "aws_backup_selection" "nightly" {
-  name         = "nightly_backup_selection"
-  iam_role_arn = aws_iam_role.this.arn
-  plan_id      = aws_backup_plan.nightly.id
-
-  selection_tag {
-    type  = "STRINGEQUALS"
-    key   = "BACKUP_POLICY"
-    value = "nightly"
-  }
-}
-
-resource "aws_backup_selection" "nightly_and_replicate" {
-  name         = "nightly_and_replicate_backup_selection"
-  iam_role_arn = aws_iam_role.this.arn
-  plan_id      = aws_backup_plan.nightly_and_replicate.id
-
-  selection_tag {
-    type  = "STRINGEQUALS"
-    key   = "BACKUP_POLICY"
-    value = "nightly_and_replicate"
-  }
-}
-
-resource "aws_backup_selection" "nightly_and_replicate_windows" {
-  name         = "nightly_and_replicate_windows_backup_selection"
-  iam_role_arn = aws_iam_role.this.arn
-  plan_id      = aws_backup_plan.nightly_and_replicate_windows.id
-
-  selection_tag {
-    type  = "STRINGEQUALS"
-    key   = "BACKUP_POLICY"
-    value = "nightly_and_replicate_windows"
-  }
-}
-
-resource "aws_backup_selection" "nightly_windows" {
-  name         = "nightly_windows_backup_selection"
-  iam_role_arn = aws_iam_role.this.arn
-  plan_id      = aws_backup_plan.nightly_windows.id
-
-  selection_tag {
-    type  = "STRINGEQUALS"
-    key   = "BACKUP_POLICY"
-    value = "nightly_windows"
   }
 }

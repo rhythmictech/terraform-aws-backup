@@ -1,5 +1,5 @@
 # terraform-aws-backup
-Create backup vault and base plans including plans that replicate to a DR region. 
+Creates a backup vault, backup plan, and tag-based backup selection. Optionally replicates this all to a DR region. 
 
 
 [![tflint](https://github.com/rhythmictech/terraform-aws-backup/workflows/tflint/badge.svg?branch=master&event=push)](https://github.com/rhythmictech/terraform-aws-backup/actions?query=workflow%3Atflint+event%3Apush+branch%3Amaster)
@@ -22,11 +22,9 @@ module "backup" {
 }
 ```
 
-Then tag resources you'd like to back up. Use the key `BACKUP_POLICY` and a value of one of:
-- `nightly`
-- `nightly_and_replicate`
-- `nightly_and_replicate_windows`
-- `nightly_windows`
+Then tag resources you'd like to back up. By default use the key `BACKUP_POLICY` and a value of one of:
+- `daily` to create backups of resources every day at 5 am
+- `daily_and_replicate` to also replicate these resources to a DR region
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
@@ -51,20 +49,15 @@ No modules.
 
 | Name | Type |
 |------|------|
-| [aws_backup_plan.monthly](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_plan) | resource |
-| [aws_backup_plan.nightly](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_plan) | resource |
-| [aws_backup_plan.nightly_and_replicate](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_plan) | resource |
-| [aws_backup_plan.nightly_and_replicate_windows](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_plan) | resource |
-| [aws_backup_plan.nightly_windows](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_plan) | resource |
-| [aws_backup_selection.monthly](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_selection) | resource |
-| [aws_backup_selection.nightly](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_selection) | resource |
-| [aws_backup_selection.nightly_and_replicate](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_selection) | resource |
-| [aws_backup_selection.nightly_and_replicate_windows](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_selection) | resource |
-| [aws_backup_selection.nightly_windows](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_selection) | resource |
+| [aws_backup_plan.and_replicate](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_plan) | resource |
+| [aws_backup_plan.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_plan) | resource |
+| [aws_backup_selection.and_replicate](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_selection) | resource |
+| [aws_backup_selection.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_selection) | resource |
 | [aws_backup_vault.primary](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_vault) | resource |
 | [aws_backup_vault.replica](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/backup_vault) | resource |
 | [aws_iam_role.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
-| [aws_iam_role_policy_attachment.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
+| [aws_iam_role_policy_attachment.backup](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
+| [aws_iam_role_policy_attachment.restore](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_kms_alias.replica](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias) | resource |
 | [aws_kms_alias.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias) | resource |
 | [aws_kms_key.replica](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) | resource |
@@ -77,12 +70,13 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_backup_selection_tags"></a> [backup\_selection\_tags](#input\_backup\_selection\_tags) | Tags for backup selection | `list(map(string))` | <pre>[<br>  {<br>    "key": "BACKUP_POLICY",<br>    "type": "STRINGEQUALS",<br>    "value": "daily"<br>  }<br>]</pre> | no |
 | <a name="input_completion_window"></a> [completion\_window](#input\_completion\_window) | Number of minutes to allow jobs to run | `number` | `420` | no |
 | <a name="input_dr_region"></a> [dr\_region](#input\_dr\_region) | Region to place replica vault in | `string` | `"us-east-2"` | no |
 | <a name="input_name"></a> [name](#input\_name) | Moniker to apply to all resources in the module | `string` | n/a | yes |
-| <a name="input_primary_monthly_retain_days"></a> [primary\_monthly\_retain\_days](#input\_primary\_monthly\_retain\_days) | Number of days to retain backups in primary site for monthly backups | `number` | `365` | no |
 | <a name="input_primary_retain_days"></a> [primary\_retain\_days](#input\_primary\_retain\_days) | Number of days to retain backups in primary site | `number` | `90` | no |
 | <a name="input_replica_retain_days"></a> [replica\_retain\_days](#input\_replica\_retain\_days) | Number of days to retain backups in primary site | `number` | `90` | no |
+| <a name="input_replicate_selection_tags"></a> [replicate\_selection\_tags](#input\_replicate\_selection\_tags) | Tags for backup and replication selection | `list(map(string))` | <pre>[<br>  {<br>    "key": "BACKUP_POLICY",<br>    "type": "STRINGEQUALS",<br>    "value": "daily_and_replicate"<br>  }<br>]</pre> | no |
 | <a name="input_schedule"></a> [schedule](#input\_schedule) | Backup schedule for all jobs | `string` | `"cron(0 5 * * ? *)"` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | User-Defined tags | `map(string)` | `{}` | no |
 
@@ -91,6 +85,8 @@ No modules.
 | Name | Description |
 |------|-------------|
 | <a name="output_backup_plan_ids"></a> [backup\_plan\_ids](#output\_backup\_plan\_ids) | Backup Plan IDs |
+| <a name="output_backup_selection_tags"></a> [backup\_selection\_tags](#output\_backup\_selection\_tags) | Tags for backup selection |
+| <a name="output_replicate_selection_tags"></a> [replicate\_selection\_tags](#output\_replicate\_selection\_tags) | Tags for backup and replication selection |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 
 ## Getting Started

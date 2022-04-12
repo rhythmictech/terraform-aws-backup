@@ -2,6 +2,26 @@
 # General Vars
 ########################################
 
+variable "backup_selection_tags" {
+  description = "Tags for backup selection"
+  type        = list(map(string))
+  default = [{
+    type  = "STRINGEQUALS"
+    key   = "BACKUP_POLICY"
+    value = "daily"
+  }]
+}
+
+variable "replicate_selection_tags" {
+  description = "Tags for backup and replication selection"
+  type        = list(map(string))
+  default = [{
+    type  = "STRINGEQUALS"
+    key   = "BACKUP_POLICY"
+    value = "daily_and_replicate"
+  }]
+}
+
 variable "completion_window" {
   default     = 420
   description = "Number of minutes to allow jobs to run"
@@ -17,12 +37,6 @@ variable "dr_region" {
 variable "name" {
   description = "Moniker to apply to all resources in the module"
   type        = string
-}
-
-variable "primary_monthly_retain_days" {
-  default     = 365
-  description = "Number of days to retain backups in primary site for monthly backups"
-  type        = number
 }
 
 variable "primary_retain_days" {
